@@ -14,7 +14,7 @@
 #include <array>
 
 
-static std::atomic<int> worksCompleted;
+	static std::atomic<int> workComplete;
 
 class uniqueDevice {
 private:
@@ -45,34 +45,43 @@ private:
 		void compute(const real& x, const real& y, const real& scale) override;
 	};
 	//
+	struct WorkerThread
+	{
+		std::condition_variable cv_start;
+		std::thread currentThread;
+		std::mutex mux;
 
-	//
-	class Cpu : public BaseDevice {
-	private:
-		std::array<std::thread, NUMBER_OF_THREADS> threads;
-		std::condition_variable start;
-		
-		bool bstart = false;
-		bool bworking;
+		bool bworking = false;
 		int* fractal;
 
 		real x;
 		real y;
 		real scale;
+		int segmentNum;
 
-		void mandelbrotSetCreator(int segmentNum);
+		void start(const real& x, const real& y, const real& scale)
+		{
+			this->x = x;
+			this->y = y;
+			this->scale = scale;
+
+			cv_start.notify_one();
+		}
+
+		void mandelbrotSetCreator();
+	};
+	//
+	class Cpu : public BaseDevice {
+	private:
+		WorkerThread threads[NUMBER_OF_THREADS];
+
 	public:
-		Cpu(): x(0.), y(0.), scale(0.), bworking(true), fractal(nullptr){}
-		Cpu(int* fractal) : bworking(true) { init(fractal); }
+		Cpu(){}
+		Cpu(int* fractal){ init(fractal); }
 
 		~Cpu()
 		{
-			bworking = false;
-
-			for (int i = 0; i < NUMBER_OF_THREADS; i++)
-			{
-				threads[i].join();
-			}
+			
 		}
 
 		void init(int* fractal) override;
@@ -82,7 +91,7 @@ private:
 
 public:
 	uniqueDevice(int* fractal) {
-		curDevice = CPU;
+		curDevice = GPU;
 		devices[GPU]->init(fractal);
 		devices[CPU]->init(fractal);
 	}

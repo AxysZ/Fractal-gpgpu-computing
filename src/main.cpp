@@ -15,7 +15,6 @@
 #include <streambuf>
 
 
-
 real scale = 0.005;
 int fractal[WIDTH * HEIGHT];
 olc::vd2d offset(0, 0);//

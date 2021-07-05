@@ -61,14 +61,12 @@ deviceChose:
 	context = cl::Context(mainDevice);
 	queue = cl::CommandQueue(context, mainDevice);
 
-	ifstream file(".\\src\\lib\\clKernel.cl", ios::binary);
+	ifstream file("../src/lib/clKernel.cl", ios::binary);
 	string source;
 
 	istreambuf_iterator<char> inputIt(file), emptyInputIt;
 	back_insert_iterator<string> stringInsert(source);
 	copy(inputIt, emptyInputIt, stringInsert);
-
-	std::cout << source << std::endl;
 
 	cl::Program::Sources src(1, make_pair(source.c_str(), source.length() + 1));
 	cl::Program program(context, src);
@@ -142,13 +140,12 @@ void uniqueDevice::Gpu::compute(const real& x, const real& y, const real& scale)
 	}
 }
 
-void uniqueDevice::Cpu::mandelbrotSetCreator(int segmentNum) {
-	std::mutex mut;
-	std::unique_lock lk(mut);
-
+void uniqueDevice::WorkerThread::mandelbrotSetCreator() {
+	
 	while (bworking) {
-		while (!bstart)
-			start.wait(lk);
+		std::mutex mut;
+		std::unique_lock lk(mut);
+		cv_start.wait(lk);
 		real yy = y;
 		real xx = x;
 		real xx1 = x;
@@ -184,31 +181,27 @@ void uniqueDevice::Cpu::mandelbrotSetCreator(int segmentNum) {
 			}
 			yy -= scale;
 		}
-		worksCompleted++;
+		workComplete++;
 	}
 }
 
 void uniqueDevice::Cpu::init(int* fractal) {
 	for (int i = 0; i < NUMBER_OF_THREADS; i++)
 	{
-		threads[i] = std::thread([this, i]() { mandelbrotSetCreator(i); });
+		threads[i].segmentNum = i;
+		threads[i].fractal = fractal;
+		threads[i].bworking = true;
+		threads[i].currentThread = std::thread(&WorkerThread::mandelbrotSetCreator, &threads[i]);
 	}
-	this->fractal = fractal;
 }
 
 void uniqueDevice::Cpu::compute(const real& x, const real& y, const real& scale) {
-	worksCompleted = 0;
-	this->x = x;
-	this->y = y;
-	this->scale = scale;
-
-
-	bstart = true;
-	start.notify_all();
-
-	while(worksCompleted < NUMBER_OF_THREADS){}
+	workComplete = 0;
+	for(int i = 0; i < NUMBER_OF_THREADS; i++)
+		threads[i].start(x, y, scale);
 	
-	bstart = false;
+
+	while(workComplete < NUMBER_OF_THREADS){}
 }
 
 void uniqueDevice::changeDevice() {
